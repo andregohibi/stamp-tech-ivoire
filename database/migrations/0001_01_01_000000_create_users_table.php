@@ -9,13 +9,23 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
+
+    public $incrementing = false;
+    protected $keyType = "string";
+
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->string('name');
             $table->string('email')->unique();
+         /*    $table->enum('role', ['super_admin', 'admin'])->default('admin');
+            $table->enum('status', ['active', 'disabled'])->default('active');
+            $table->string('avatar')->nullable();
+            $table->string('phone')->nullable(); */
             $table->timestamp('email_verified_at')->nullable();
+            $table->timestamp('last_login_at')->nullable();
+            $table->string('last_login_ip')->nullable();
             $table->string('password');
             $table->rememberToken();
             $table->timestamps();
