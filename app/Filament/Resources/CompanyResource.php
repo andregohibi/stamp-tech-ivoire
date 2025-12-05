@@ -7,10 +7,15 @@ use Filament\Tables;
 use App\Models\Company;
 use Filament\Forms\Form;
 use Filament\Tables\Table;
+use Illuminate\Support\Carbon;
+use Tables\Enums\FiltersLayout;
 use Filament\Resources\Resource;
+use Filament\Tables\Actions\Action;
+use Filament\Tables\Filters\Filter;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Section;
+use Filament\Tables\Filters\Indicator;
 use Filament\Forms\Components\Textarea;
 use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
@@ -18,7 +23,9 @@ use App\Filament\Resources\BaseResource;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Database\Eloquent\Builder;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use App\Filament\Resources\CompanyResource;
 use Filament\Tables\Actions\BulkActionGroup;
@@ -30,9 +37,10 @@ use Filament\Tables\Actions\ForceDeleteBulkAction;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\CompanyResource\RelationManagers;
 use App\Filament\Resources\CompanyResource\Pages\EditCompany;
+use App\Filament\Resources\CompanyResource\Pages\ViewCompany;
 use App\Filament\Resources\CompanyResource\Pages\CreateCompany;
 use App\Filament\Resources\CompanyResource\Pages\ListCompanies;
-use App\Filament\Resources\CompanyResource\Pages\ViewCompany;
+use App\Filament\Resources\CompanyResource\RelationManagers\SignatariesRelationManager;
 
 class CompanyResource extends BaseResource
 {
@@ -299,6 +307,7 @@ class CompanyResource extends BaseResource
     public static function table(Table $table): Table
     {
         return $table
+            ->searchPlaceholder('Rechercher une entreprise')
             ->columns([
                TextColumn::make('name')->label('Nom')
                 ->searchable()
@@ -308,14 +317,119 @@ class CompanyResource extends BaseResource
                 TextColumn::make('legal_name')->label('Raison Sociale')->searchable()->sortable(),
                 TextColumn::make('email')->label('Email')->searchable()->sortable(),
                 TextColumn::make('phone')->label('Tel')->searchable()->sortable(),
-                TextColumn::make('country')->label('Pays')->searchable()->sortable()
+                TextColumn::make('country')->label('Pays')->searchable()->sortable(),
+                TextColumn::make('sector')->label('Secteur')->badge()->searchable(),
+                TextColumn::make('status')
+                ->label('Statut')
+                ->badge()
+                ->searchable()
+                ->sortable()
+                ->formatStateUsing(fn (string $state): string => match ($state) {
+                    'active' => 'Active',
+                    'disabled' => 'Désactivée',
+                    'revoked' => 'Révoquée',
+                    default => $state,
+                })
+                ->color(fn (string $state): string => match ($state) {
+                    'active' => 'success',
+                    'disabled' => 'warning',
+                    'revoked' => 'danger',
+                    default => 'gray',
+                }),
 
             ])
             ->filters([
-                Tables\Filters\TrashedFilter::make(),
-            ])
-            ->actions([
-                EditAction::make(),
+                SelectFilter::make('trashed')
+                    ->label('État')
+                    ->options([
+                        'without' => 'Actifs',
+                        'with' => 'Tous',
+                        'only' => 'Supprimés',
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        return match ($data['value'] ?? null) {
+                            'with' => $query->withTrashed(),
+                            'only' => $query->onlyTrashed(),
+                            default => $query->withoutTrashed(),
+                        };
+                    })
+                    ->columnSpanFull(),
+
+                // Filtre par secteur d'activité - occupe toute la largeur
+                SelectFilter::make('sector')
+                    ->label('Secteur d\'activité')
+                    ->options([
+                        'Technology' => 'Technologie',
+                        'Finance' => 'Finance',
+                        'Healthcare' => 'Santé',
+                        'Education' => 'Éducation',
+                        'Manufacturing' => 'Industrie',
+                        'Retail' => 'Commerce de détail',
+                        'Services' => 'Services',
+                        'Construction' => 'Construction',
+                        'Transportation' => 'Transport',
+                        'Agriculture' => 'Agriculture',
+                    ])
+                    ->searchable()
+                    ->preload()
+                    ->multiple()
+                    ->columnSpanFull()
+                    ->query(function (Builder $query, array $data) {
+                        if (empty($data['values'])) {
+                            return $query;
+                        }
+                        return $query->whereIn('sector', $data['values']);
+                    }),
+
+                // Filtre par pays - occupe toute la largeur avec tous les pays
+                SelectFilter::make('country')
+                    ->label('Pays')
+                    ->options(self::getCountries())
+                    ->searchable()
+                    ->preload()
+                    ->multiple()
+                    ->columnSpanFull()
+                    ->query(function (Builder $query, array $data) {
+                        if (empty($data['values'])) {
+                            return $query;
+                        }
+                        return $query->whereIn('country', $data['values']);
+                    }),
+
+                // Filtre par statut - occupe toute la largeur
+                SelectFilter::make('status')
+                    ->label('Statut')
+                    ->options([
+                        'active' => 'Active',
+                        'disabled' => 'Désactivée',
+                        'revoked' => 'Révoquée',
+                    ])
+                    ->multiple()
+                    ->columnSpanFull()
+                    ->query(function (Builder $query, array $data) {
+                        if (empty($data['values'])) {
+                            return $query;
+                        }
+                        return $query->whereIn('status', $data['values']);
+                    }),
+
+                // Filtre par type d'abonnement - occupe toute la largeur
+                SelectFilter::make('subscription_type')
+                    ->label('Type d\'abonnement')
+                    ->options([
+                        'free' => 'Gratuit',
+                        'basic' => 'Basique',
+                        'premium' => 'Premium',
+                        'enterprise' => 'Entreprise',
+                    ])
+                    ->multiple()
+                    ->columnSpanFull()
+                    ->query(function (Builder $query, array $data) {
+                        if (empty($data['values'])) {
+                            return $query;
+                        }
+                        return $query->whereIn('subscription_type', $data['values']);
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -329,7 +443,7 @@ class CompanyResource extends BaseResource
     public static function getRelations(): array
     {
         return [
-            //
+             SignatariesRelationManager::class,
         ];
     }
 
@@ -337,8 +451,8 @@ class CompanyResource extends BaseResource
     {
         return [
             'index' => Pages\ListCompanies::route('/'),
-            'create' => Pages\CreateCompany::route('/create'),
-            'edit' => Pages\EditCompany::route('/{record}/edit'),
+            'create' => Pages\CreateCompany::route('/creer-une-entreprise'),
+            'edit' => Pages\EditCompany::route('/modifier-entreprise/{record:id}'),
             'view' => ViewCompany::route('/details/{record:id}'),
         ];
     }
@@ -351,90 +465,516 @@ class CompanyResource extends BaseResource
             ]);
     }
 
-    public static function getCountries(): array
+    /*  public static function getCountries(): array
     {
+        // Liste complète des pays (ISO 3166-1 alpha-2)
         return [
-            // Afrique
+            'AF' => 'Afghanistan',
+            'ZA' => 'Afrique du Sud',
+            'AL' => 'Albanie',
             'DZ' => 'Algérie',
+            'DE' => 'Allemagne',
+            'AD' => 'Andorre',
             'AO' => 'Angola',
+            'AI' => 'Anguilla',
+            'AQ' => 'Antarctique',
+            'AG' => 'Antigua-et-Barbuda',
+            'SA' => 'Arabie saoudite',
+            'AR' => 'Argentine',
+            'AM' => 'Arménie',
+            'AW' => 'Aruba',
+            'AU' => 'Australie',
+            'AT' => 'Autriche',
+            'AZ' => 'Azerbaïdjan',
+            'BS' => 'Bahamas',
+            'BH' => 'Bahreïn',
+            'BD' => 'Bangladesh',
+            'BB' => 'Barbade',
+            'BY' => 'Bélarus',
+            'BE' => 'Belgique',
+            'BZ' => 'Belize',
             'BJ' => 'Bénin',
+            'BM' => 'Bermudes',
+            'BT' => 'Bhoutan',
+            'BO' => 'Bolivie',
+            'BA' => 'Bosnie-Herzégovine',
             'BW' => 'Botswana',
+            'BR' => 'Brésil',
+            'BN' => 'Brunei',
+            'BG' => 'Bulgarie',
             'BF' => 'Burkina Faso',
             'BI' => 'Burundi',
+            'KH' => 'Cambodge',
             'CM' => 'Cameroun',
+            'CA' => 'Canada',
             'CV' => 'Cap-Vert',
-            'CF' => 'République centrafricaine',
-            'TD' => 'Tchad',
+            'CL' => 'Chili',
+            'CN' => 'Chine',
+            'CY' => 'Chypre',
+            'CO' => 'Colombie',
             'KM' => 'Comores',
-            'CG' => 'Congo',
-            'CD' => 'République démocratique du Congo',
+            'CG' => 'Congo-Brazzaville',
+            'CD' => 'Congo-Kinshasa',
+            'KP' => 'Corée du Nord',
+            'KR' => 'Corée du Sud',
+            'CR' => 'Costa Rica',
             'CI' => 'Côte d\'Ivoire',
+            'HR' => 'Croatie',
+            'CU' => 'Cuba',
+            'CW' => 'Curaçao',
+            'DK' => 'Danemark',
             'DJ' => 'Djibouti',
+            'DM' => 'Dominique',
             'EG' => 'Égypte',
-            'GQ' => 'Guinée équatoriale',
+            'AE' => 'Émirats arabes unis',
+            'EC' => 'Équateur',
             'ER' => 'Érythrée',
+            'ES' => 'Espagne',
+            'EE' => 'Estonie',
             'SZ' => 'Eswatini',
+            'VA' => 'État de la Cité du Vatican',
+            'FM' => 'États fédérés de Micronésie',
+            'US' => 'États-Unis',
             'ET' => 'Éthiopie',
+            'FJ' => 'Fidji',
+            'FI' => 'Finlande',
+            'FR' => 'France',
             'GA' => 'Gabon',
             'GM' => 'Gambie',
+            'GE' => 'Géorgie',
+            'GS' => 'Géorgie du Sud-et-les Îles Sandwich du Sud',
             'GH' => 'Ghana',
+            'GI' => 'Gibraltar',
+            'GR' => 'Grèce',
+            'GD' => 'Grenade',
+            'GL' => 'Groenland',
+            'GP' => 'Guadeloupe',
+            'GU' => 'Guam',
+            'GT' => 'Guatemala',
+            'GG' => 'Guernesey',
             'GN' => 'Guinée',
+            'GQ' => 'Guinée équatoriale',
             'GW' => 'Guinée-Bissau',
+            'GY' => 'Guyana',
+            'GF' => 'Guyane française',
+            'HT' => 'Haïti',
+            'HN' => 'Honduras',
+            'HU' => 'Hongrie',
+            'BV' => 'Île Bouvet',
+            'CX' => 'Île Christmas',
+            'IM' => 'Île de Man',
+            'NF' => 'Île Norfolk',
+            'AX' => 'Îles Åland',
+            'KY' => 'Îles Caïmans',
+            'CC' => 'Îles Cocos',
+            'CK' => 'Îles Cook',
+            'FO' => 'Îles Féroé',
+            'HM' => 'Îles Heard-et-MacDonald',
+            'FK' => 'Îles Malouines',
+            'MP' => 'Îles Mariannes du Nord',
+            'MH' => 'Îles Marshall',
+            'UM' => 'Îles mineures éloignées des États-Unis',
+            'PN' => 'Îles Pitcairn',
+            'SB' => 'Îles Salomon',
+            'TC' => 'Îles Turques-et-Caïques',
+            'VG' => 'Îles Vierges britanniques',
+            'VI' => 'Îles Vierges des États-Unis',
+            'IN' => 'Inde',
+            'ID' => 'Indonésie',
+            'IR' => 'Iran',
+            'IQ' => 'Irak',
+            'IE' => 'Irlande',
+            'IS' => 'Islande',
+            'IL' => 'Israël',
+            'IT' => 'Italie',
+            'JM' => 'Jamaïque',
+            'JP' => 'Japon',
+            'JE' => 'Jersey',
+            'JO' => 'Jordanie',
+            'KZ' => 'Kazakhstan',
             'KE' => 'Kenya',
+            'KG' => 'Kirghizistan',
+            'KI' => 'Kiribati',
+            'KW' => 'Koweït',
+            'RE' => 'La Réunion',
+            'LA' => 'Laos',
             'LS' => 'Lesotho',
+            'LV' => 'Lettonie',
+            'LB' => 'Liban',
             'LR' => 'Libéria',
             'LY' => 'Libye',
+            'LI' => 'Liechtenstein',
+            'LT' => 'Lituanie',
+            'LU' => 'Luxembourg',
+            'MK' => 'Macédoine du Nord',
             'MG' => 'Madagascar',
+            'MY' => 'Malaisie',
             'MW' => 'Malawi',
+            'MV' => 'Maldives',
             'ML' => 'Mali',
-            'MR' => 'Mauritanie',
-            'MU' => 'Maurice',
+            'MT' => 'Malte',
             'MA' => 'Maroc',
+            'MQ' => 'Martinique',
+            'MU' => 'Maurice',
+            'MR' => 'Mauritanie',
+            'YT' => 'Mayotte',
+            'MX' => 'Mexique',
+            'MD' => 'Moldavie',
+            'MC' => 'Monaco',
+            'MN' => 'Mongolie',
+            'ME' => 'Monténégro',
+            'MS' => 'Montserrat',
             'MZ' => 'Mozambique',
+            'MM' => 'Myanmar (Birmanie)',
             'NA' => 'Namibie',
+            'NR' => 'Nauru',
+            'NP' => 'Népal',
+            'NI' => 'Nicaragua',
             'NE' => 'Niger',
             'NG' => 'Nigéria',
+            'NU' => 'Niue',
+            'NO' => 'Norvège',
+            'NC' => 'Nouvelle-Calédonie',
+            'NZ' => 'Nouvelle-Zélande',
+            'OM' => 'Oman',
+            'UG' => 'Ouganda',
+            'UZ' => 'Ouzbékistan',
+            'PK' => 'Pakistan',
+            'PW' => 'Palaos',
+            'PA' => 'Panama',
+            'PG' => 'Papouasie-Nouvelle-Guinée',
+            'PY' => 'Paraguay',
+            'NL' => 'Pays-Bas',
+            'BQ' => 'Pays-Bas caribéens',
+            'PE' => 'Pérou',
+            'PH' => 'Philippines',
+            'PL' => 'Pologne',
+            'PF' => 'Polynésie française',
+            'PR' => 'Porto Rico',
+            'PT' => 'Portugal',
+            'QA' => 'Qatar',
+            'HK' => 'R.A.S. chinoise de Hong Kong',
+            'MO' => 'R.A.S. chinoise de Macao',
+            'CF' => 'République centrafricaine',
+            'DO' => 'République dominicaine',
+            'CZ' => 'République tchèque',
+            'RO' => 'Roumanie',
+            'GB' => 'Royaume-Uni',
+            'RU' => 'Russie',
             'RW' => 'Rwanda',
+            'EH' => 'Sahara occidental',
+            'BL' => 'Saint-Barthélemy',
+            'KN' => 'Saint-Christophe-et-Niévès',
+            'SM' => 'Saint-Marin',
+            'MF' => 'Saint-Martin',
+            'SX' => 'Saint-Martin',
+            'PM' => 'Saint-Pierre-et-Miquelon',
+            'VC' => 'Saint-Vincent-et-les-Grenadines',
+            'SH' => 'Sainte-Hélène',
+            'LC' => 'Sainte-Lucie',
+            'SV' => 'Salvador',
+            'WS' => 'Samoa',
+            'AS' => 'Samoa américaines',
             'ST' => 'Sao Tomé-et-Principe',
             'SN' => 'Sénégal',
+            'RS' => 'Serbie',
             'SC' => 'Seychelles',
             'SL' => 'Sierra Leone',
+            'SG' => 'Singapour',
+            'SK' => 'Slovaquie',
+            'SI' => 'Slovénie',
             'SO' => 'Somalie',
-            'ZA' => 'Afrique du Sud',
-            'SS' => 'Soudan du Sud',
             'SD' => 'Soudan',
+            'SS' => 'Soudan du Sud',
+            'LK' => 'Sri Lanka',
+            'SE' => 'Suède',
+            'CH' => 'Suisse',
+            'SR' => 'Suriname',
+            'SJ' => 'Svalbard et Jan Mayen',
+            'SY' => 'Syrie',
+            'TJ' => 'Tadjikistan',
+            'TW' => 'Taïwan',
             'TZ' => 'Tanzanie',
+            'TD' => 'Tchad',
+            'TF' => 'Terres australes françaises',
+            'IO' => 'Territoire britannique de l\'océan Indien',
+            'PS' => 'Territoires palestiniens',
+            'TH' => 'Thaïlande',
+            'TL' => 'Timor oriental',
             'TG' => 'Togo',
+            'TK' => 'Tokelau',
+            'TO' => 'Tonga',
+            'TT' => 'Trinité-et-Tobago',
             'TN' => 'Tunisie',
-            'UG' => 'Ouganda',
+            'TM' => 'Turkménistan',
+            'TR' => 'Turquie',
+            'TV' => 'Tuvalu',
+            'UA' => 'Ukraine',
+            'UY' => 'Uruguay',
+            'VU' => 'Vanuatu',
+            'VE' => 'Venezuela',
+            'VN' => 'Vietnam',
+            'WF' => 'Wallis-et-Futuna',
+            'YE' => 'Yémen',
             'ZM' => 'Zambie',
             'ZW' => 'Zimbabwe',
+        ];
+    } */
 
-            // Europe
-            'FR' => 'France',
-            'BE' => 'Belgique',
-            'CH' => 'Suisse',
-            'LU' => 'Luxembourg',
-            'DE' => 'Allemagne',
-            'ES' => 'Espagne',
-            'IT' => 'Italie',
-            'GB' => 'Royaume-Uni',
-            'NL' => 'Pays-Bas',
-            'PT' => 'Portugal',
 
-            // Amériques
-            'US' => 'États-Unis',
+    public static function getCountries(): array
+    {
+    // Complete list of countries (ISO 3166-1 alpha-2)
+        return [
+            'AF' => 'Afghanistan',
+            'ZA' => 'South Africa',
+            'AL' => 'Albania',
+            'DZ' => 'Algeria',
+            'DE' => 'Germany',
+            'AD' => 'Andorra',
+            'AO' => 'Angola',
+            'AI' => 'Anguilla',
+            'AQ' => 'Antarctica',
+            'AG' => 'Antigua and Barbuda',
+            'SA' => 'Saudi Arabia',
+            'AR' => 'Argentina',
+            'AM' => 'Armenia',
+            'AW' => 'Aruba',
+            'AU' => 'Australia',
+            'AT' => 'Austria',
+            'AZ' => 'Azerbaijan',
+            'BS' => 'Bahamas',
+            'BH' => 'Bahrain',
+            'BD' => 'Bangladesh',
+            'BB' => 'Barbados',
+            'BY' => 'Belarus',
+            'BE' => 'Belgium',
+            'BZ' => 'Belize',
+            'BJ' => 'Benin',
+            'BM' => 'Bermuda',
+            'BT' => 'Bhutan',
+            'BO' => 'Bolivia',
+            'BA' => 'Bosnia and Herzegovina',
+            'BW' => 'Botswana',
+            'BR' => 'Brazil',
+            'BN' => 'Brunei',
+            'BG' => 'Bulgaria',
+            'BF' => 'Burkina Faso',
+            'BI' => 'Burundi',
+            'KH' => 'Cambodia',
+            'CM' => 'Cameroon',
             'CA' => 'Canada',
-            'BR' => 'Brésil',
-
-            // Asie
-            'CN' => 'Chine',
-            'JP' => 'Japon',
-            'IN' => 'Inde',
-
-            // Autres
-            'AU' => 'Australie',
-            'NZ' => 'Nouvelle-Zélande',
+            'CV' => 'Cape Verde',
+            'CL' => 'Chile',
+            'CN' => 'China',
+            'CY' => 'Cyprus',
+            'CO' => 'Colombia',
+            'KM' => 'Comoros',
+            'CG' => 'Congo-Brazzaville',
+            'CD' => 'Congo-Kinshasa',
+            'KP' => 'North Korea',
+            'KR' => 'South Korea',
+            'CR' => 'Costa Rica',
+            'CI' => 'Ivory Coast',
+            'HR' => 'Croatia',
+            'CU' => 'Cuba',
+            'CW' => 'Curaçao',
+            'DK' => 'Denmark',
+            'DJ' => 'Djibouti',
+            'DM' => 'Dominica',
+            'EG' => 'Egypt',
+            'AE' => 'United Arab Emirates',
+            'EC' => 'Ecuador',
+            'ER' => 'Eritrea',
+            'ES' => 'Spain',
+            'EE' => 'Estonia',
+            'SZ' => 'Eswatini',
+            'VA' => 'Vatican City State',
+            'FM' => 'Federated States of Micronesia',
+            'US' => 'United States',
+            'ET' => 'Ethiopia',
+            'FJ' => 'Fiji',
+            'FI' => 'Finland',
+            'FR' => 'France',
+            'GA' => 'Gabon',
+            'GM' => 'Gambia',
+            'GE' => 'Georgia',
+            'GS' => 'South Georgia and the South Sandwich Islands',
+            'GH' => 'Ghana',
+            'GI' => 'Gibraltar',
+            'GR' => 'Greece',
+            'GD' => 'Grenada',
+            'GL' => 'Greenland',
+            'GP' => 'Guadeloupe',
+            'GU' => 'Guam',
+            'GT' => 'Guatemala',
+            'GG' => 'Guernsey',
+            'GN' => 'Guinea',
+            'GQ' => 'Equatorial Guinea',
+            'GW' => 'Guinea-Bissau',
+            'GY' => 'Guyana',
+            'GF' => 'French Guiana',
+            'HT' => 'Haiti',
+            'HN' => 'Honduras',
+            'HU' => 'Hungary',
+            'BV' => 'Bouvet Island',
+            'CX' => 'Christmas Island',
+            'IM' => 'Isle of Man',
+            'NF' => 'Norfolk Island',
+            'AX' => 'Åland Islands',
+            'KY' => 'Cayman Islands',
+            'CC' => 'Cocos (Keeling) Islands',
+            'CK' => 'Cook Islands',
+            'FO' => 'Faroe Islands',
+            'HM' => 'Heard Island and McDonald Islands',
+            'FK' => 'Falkland Islands',
+            'MP' => 'Northern Mariana Islands',
+            'MH' => 'Marshall Islands',
+            'UM' => 'United States Minor Outlying Islands',
+            'PN' => 'Pitcairn Islands',
+            'SB' => 'Solomon Islands',
+            'TC' => 'Turks and Caicos Islands',
+            'VG' => 'British Virgin Islands',
+            'VI' => 'United States Virgin Islands',
+            'IN' => 'India',
+            'ID' => 'Indonesia',
+            'IR' => 'Iran',
+            'IQ' => 'Iraq',
+            'IE' => 'Ireland',
+            'IS' => 'Iceland',
+            'IL' => 'Israel',
+            'IT' => 'Italy',
+            'JM' => 'Jamaica',
+            'JP' => 'Japan',
+            'JE' => 'Jersey',
+            'JO' => 'Jordan',
+            'KZ' => 'Kazakhstan',
+            'KE' => 'Kenya',
+            'KG' => 'Kyrgyzstan',
+            'KI' => 'Kiribati',
+            'KW' => 'Kuwait',
+            'RE' => 'Réunion',
+            'LA' => 'Laos',
+            'LS' => 'Lesotho',
+            'LV' => 'Latvia',
+            'LB' => 'Lebanon',
+            'LR' => 'Liberia',
+            'LY' => 'Libya',
+            'LI' => 'Liechtenstein',
+            'LT' => 'Lithuania',
+            'LU' => 'Luxembourg',
+            'MK' => 'North Macedonia',
+            'MG' => 'Madagascar',
+            'MY' => 'Malaysia',
+            'MW' => 'Malawi',
+            'MV' => 'Maldives',
+            'ML' => 'Mali',
+            'MT' => 'Malta',
+            'MA' => 'Morocco',
+            'MQ' => 'Martinique',
+            'MU' => 'Mauritius',
+            'MR' => 'Mauritania',
+            'YT' => 'Mayotte',
+            'MX' => 'Mexico',
+            'MD' => 'Moldova',
+            'MC' => 'Monaco',
+            'MN' => 'Mongolia',
+            'ME' => 'Montenegro',
+            'MS' => 'Montserrat',
+            'MZ' => 'Mozambique',
+            'MM' => 'Myanmar (Burma)',
+            'NA' => 'Namibia',
+            'NR' => 'Nauru',
+            'NP' => 'Nepal',
+            'NI' => 'Nicaragua',
+            'NE' => 'Niger',
+            'NG' => 'Nigeria',
+            'NU' => 'Niue',
+            'NO' => 'Norway',
+            'NC' => 'New Caledonia',
+            'NZ' => 'New Zealand',
+            'OM' => 'Oman',
+            'UG' => 'Uganda',
+            'UZ' => 'Uzbekistan',
+            'PK' => 'Pakistan',
+            'PW' => 'Palau',
+            'PA' => 'Panama',
+            'PG' => 'Papua New Guinea',
+            'PY' => 'Paraguay',
+            'NL' => 'Netherlands',
+            'BQ' => 'Caribbean Netherlands',
+            'PE' => 'Peru',
+            'PH' => 'Philippines',
+            'PL' => 'Poland',
+            'PF' => 'French Polynesia',
+            'PR' => 'Puerto Rico',
+            'PT' => 'Portugal',
+            'QA' => 'Qatar',
+            'HK' => 'Hong Kong SAR China',
+            'MO' => 'Macao SAR China',
+            'CF' => 'Central African Republic',
+            'DO' => 'Dominican Republic',
+            'CZ' => 'Czech Republic',
+            'RO' => 'Romania',
+            'GB' => 'United Kingdom',
+            'RU' => 'Russia',
+            'RW' => 'Rwanda',
+            'EH' => 'Western Sahara',
+            'BL' => 'Saint Barthélemy',
+            'KN' => 'Saint Kitts and Nevis',
+            'SM' => 'San Marino',
+            'MF' => 'Saint Martin',
+            'SX' => 'Sint Maarten',
+            'PM' => 'Saint Pierre and Miquelon',
+            'VC' => 'Saint Vincent and the Grenadines',
+            'SH' => 'Saint Helena',
+            'LC' => 'Saint Lucia',
+            'SV' => 'El Salvador',
+            'WS' => 'Samoa',
+            'AS' => 'American Samoa',
+            'ST' => 'São Tomé and Príncipe',
+            'SN' => 'Senegal',
+            'RS' => 'Serbia',
+            'SC' => 'Seychelles',
+            'SL' => 'Sierra Leone',
+            'SG' => 'Singapore',
+            'SK' => 'Slovakia',
+            'SI' => 'Slovenia',
+            'SO' => 'Somalia',
+            'SD' => 'Sudan',
+            'SS' => 'South Sudan',
+            'LK' => 'Sri Lanka',
+            'SE' => 'Sweden',
+            'CH' => 'Switzerland',
+            'SR' => 'Suriname',
+            'SJ' => 'Svalbard and Jan Mayen',
+            'SY' => 'Syria',
+            'TJ' => 'Tajikistan',
+            'TW' => 'Taiwan',
+            'TZ' => 'Tanzania',
+            'TD' => 'Chad',
+            'TF' => 'French Southern Territories',
+            'IO' => 'British Indian Ocean Territory',
+            'PS' => 'Palestinian Territories',
+            'TH' => 'Thailand',
+            'TL' => 'Timor-Leste',
+            'TG' => 'Togo',
+            'TK' => 'Tokelau',
+            'TO' => 'Tonga',
+            'TT' => 'Trinidad and Tobago',
+            'TN' => 'Tunisia',
+            'TM' => 'Turkmenistan',
+            'TR' => 'Turkey',
+            'TV' => 'Tuvalu',
+            'UA' => 'Ukraine',
+            'UY' => 'Uruguay',
+            'VU' => 'Vanuatu',
+            'VE' => 'Venezuela',
+            'VN' => 'Vietnam',
+            'WF' => 'Wallis and Futuna',
+            'YE' => 'Yemen',
+            'ZM' => 'Zambia',
+            'ZW' => 'Zimbabwe',
         ];
     }
 }

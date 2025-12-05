@@ -18,6 +18,9 @@ class CompanyFactory extends Factory
      */
     public function definition(): array
     {
+        // Récupérer un utilisateur aléatoire
+        $user = User::inRandomOrder()->first();
+
         return [
          'id' => (string) Str::uuid(),
             'name' => $this->faker->company(),
@@ -48,7 +51,7 @@ class CompanyFactory extends Factory
             'qr_quota' => $this->faker->numberBetween(10, 1000),
             'qr_used' => $this->faker->numberBetween(0, 50),
             'notes' => $this->faker->optional()->sentence(),
-            'created_by' => User::inRandomOrder()->first()?->id ?? null,
+            'created_by' => $user ? $user->name : null,
         ];
     }
 }

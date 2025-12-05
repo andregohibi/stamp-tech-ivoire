@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\User;
 use App\Models\QrStamp;
 use App\Models\Signatory;
 use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Company extends Model
@@ -103,6 +106,61 @@ class Company extends Model
     public function deletedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'deleted_by');
+    }
+
+      public function isSubscriptionExpired(): bool
+    {
+        return $this->subscription_expires_at && $this->subscription_expires_at->isPast();
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    /**
+     * Vérifier si l'entreprise a atteint son quota de QR codes
+     */
+    public function hasReachedQrQuota(): bool
+    {
+        return $this->qr_used >= $this->qr_quota;
+    }
+
+    /**
+     * Vérifier si l'entreprise peut générer un QR code
+     */
+    public function canGenerateQr(): bool
+    {
+        return $this->isActive() 
+            && !$this->isSubscriptionExpired() 
+            && !$this->hasReachedQrQuota();
+    }
+
+    /**
+     * Incrémenter le compteur de QR codes utilisés
+     */
+    public function incrementQrUsed(): void
+    {
+        $this->increment('qr_used');
+    }
+
+    /**
+     * Obtenir le nombre de QR codes restants
+     */
+    public function getRemainingQrQuota(): int
+    {
+        return max(0, $this->qr_quota - $this->qr_used);
+    }
+
+    /**
+     * Obtenir les signataires avec QR code actif
+     */
+    public function signatoriesWithActiveQr()
+    {
+        return $this->signatories()
+            ->whereHas('qrStamp', function ($query) {
+                $query->active();
+            });
     }
 
 

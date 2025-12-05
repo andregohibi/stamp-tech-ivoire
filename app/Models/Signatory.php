@@ -2,8 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\User;
+use App\Models\Company;
+use App\Models\QrStamp;
+use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Signatory extends Model
@@ -85,6 +91,22 @@ class Signatory extends Model
         return "{$this->first_name} {$this->last_name}";
     }
 
+     public function hasQrStamp(): bool
+    {
+        return $this->qrStamp()->exists();
+    }
+
+
+    public function hasActiveQrStamp(): bool
+    {
+        $qr = $this->qrStamp()->first();
+
+        if (! $qr) {
+            return false;
+        }
+
+        return method_exists($qr, 'isActive') ? $qr->isActive() : ($qr->status === 'active' && (is_null($qr->expires_at) || $qr->expires_at > now()));
+    }
 
    
 }

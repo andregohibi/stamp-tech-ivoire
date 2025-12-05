@@ -1,26 +1,27 @@
 <?php
 
-namespace App\Filament\Resources\CompanyResource\Pages;
+namespace App\Filament\Resources\SignatoryResource\Pages;
 
 use Filament\Actions;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\CreateRecord;
-use App\Filament\Resources\CompanyResource;
+use App\Filament\Resources\SignatoryResource;
 
-class CreateCompany extends CreateRecord
+class CreateSignatory extends CreateRecord
 {
-    protected static string $resource = CompanyResource::class;
+    protected static string $resource = SignatoryResource::class;
 
     public function getBreadcrumb(): string
     {
-        return "Creation d'une entreprise";
+        return "Ajouter un signataire";
     }
 
     public function getTitle(): string
     {
-        return 'Créer une entreprise';
+        return "Ajouter un signataire";
     }
 
+    
     protected function getFormActions(): array
     {
         return [
@@ -43,5 +44,4 @@ class CreateCompany extends CreateRecord
                 ->icon('heroicon-m-x-circle'),
         ];
     }
-
 }

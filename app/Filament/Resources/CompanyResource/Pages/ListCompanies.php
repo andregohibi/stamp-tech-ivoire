@@ -43,4 +43,6 @@ class ListCompanies extends ListRecords
     {
         return 'Liste des entreprises';
     }
+
+    
 }

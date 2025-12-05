@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use App\Models\Company;
+use App\Models\Signatory;
 use Illuminate\Database\Seeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 
@@ -23,6 +24,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'test@example.com',
         ]); */
 
-        Company::factory(10)->create();
+        // Company::factory(10)->create();
+        Signatory::factory(15)->create();
     }
 }

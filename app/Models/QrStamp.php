@@ -2,8 +2,12 @@
 
 namespace App\Models;
 
+use App\Models\User;
+use App\Models\Company;
+use App\Models\Signatory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class QrStamp extends Model
@@ -15,7 +19,10 @@ class QrStamp extends Model
     public $incrementing = true;
 
     protected $fillable = [
-         'payload_encrypted',
+        'unique_code',
+        'company_id',
+        'signatory_id',
+        'payload_encrypted',
         'signature_hash',
         'qr_image_path',
         'status',
@@ -24,17 +31,14 @@ class QrStamp extends Model
         'revoked_at',
         'revocation_reason',
         'metadata',
+        'created_by',
+         'updated_by',
 
     ];
 
     protected $guarded = [
-        'unique_code',
-        'company_id',
-        'signatory_id',
         'verification_count',
         'last_verified_at',
-        'created_by',
-        'updated_by',
         'deleted_by',
         'created_at',
         'updated_at',
@@ -80,4 +84,40 @@ class QrStamp extends Model
         return $this->belongsTo(User::class, 'deleted_by');
     }
 
+     public function isActive(): bool
+    {
+        return $this->status === 'active' 
+            && (is_null($this->expires_at) || $this->expires_at->isFuture());
+    }
+
+    public function isExpired(): bool
+    {
+        return $this->expires_at && $this->expires_at->isPast();
+    }
+
+    public function isRevoked(): bool
+    {
+        return $this->status === 'revoked';
+    }
+
+    public function incrementVerification(): void
+    {
+        $this->increment('verification_count');
+        $this->update(['last_verified_at' => now()]);
+    }
+
+    // Scopes
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'active')
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                    ->orWhere('expires_at', '>', now());
+            });
+    }
+
+    public function canBeVerified(): bool
+    {
+        return $this->isActive() && ! $this->isRevoked();
+    }
 }
