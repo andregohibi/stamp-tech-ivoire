@@ -48,15 +48,17 @@ class CompanyResource extends BaseResource
 
     protected static ?string $navigationIcon = 'heroicon-o-briefcase';
 
+    protected static ?string $navigationGroup = 'Gestion des signataires';
+
     protected static ?string $navigationLabel = 'Entreprises';
 
-    protected static ?string $recordTitleAttribute = 'Entreprise';
+    protected static ?string $recordTitleAttribute = 'name';
 
     protected static ?string $modelLabel = 'Entreprise';
     
     protected static ?string $pluralModelLabel = 'Entreprises';
 
-    protected static bool $shouldSkipAuthorization = true;
+    protected static bool $shouldSkipAuthorization = false;
 
 
 

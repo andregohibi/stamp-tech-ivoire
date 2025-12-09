@@ -19,7 +19,7 @@ class QrStampService
 {
     private function preparePayload(Signatory $signatory): array
     {
-        if (! $signatory->company) {
+        if (!$signatory->company) {
             throw new \Exception("Signataire non rattaché à une entreprise.");
         }
 
@@ -63,13 +63,19 @@ class QrStampService
 
     private function generateCodeUnique(): string
     {
+        // Génère un token sécurisé (32+ caractères)
+        // Utilise random_bytes pour une entropie maximale + UUID pour redundance
+        
         $maxAttempts = 10;
         $attempts = 0;
 
         do {
-            $uuid = str_replace('-', '', (string) Str::uuid());
-            $timestamp = dechex(time() * 1000);
-            $code = strtoupper(substr($uuid . $timestamp, 0, 14));
+            // random_bytes(24) = 192 bits, base64url = 32 caractères
+            $randomBytes = bin2hex(random_bytes(24)); // 48 caractères en hex
+            $timestamp = dechex(time() * 1000); // timestamp en hex
+            
+            // Combiner et tronquer à 40 caractères pour plus d'entropie
+            $code = str_shuffle(substr($randomBytes . $timestamp, 0, 40));
 
             $attempts++;
             if ($attempts >= $maxAttempts) {
@@ -78,6 +84,12 @@ class QrStampService
         } while (QrStamp::where('unique_code', $code)->exists());
 
         return $code;
+    }
+
+    private function generateTokenHash(string $token): string
+    {
+        // Stocker le SHA256 du token (one-way hash)
+        return hash('sha256', $token, false);
     }
 
     private function getCompanyFolder(Company $company): string
@@ -95,18 +107,15 @@ class QrStampService
     private function generateQrImage(QrStamp $qrStamp): string
     {
         try {
-            $verificationData = base64_encode(json_encode([
-                'code' => $qrStamp->unique_code,
-                'hash' => $qrStamp->signature_hash,
-            ]));
-
-           
+            // URL de vérification sécurisée: /api/qr/verify/{token}
+            // Le token brut est dans l'URL, le hash est stocké en DB
+            $verificationUrl = route('qr.verify', ['token' => $qrStamp->unique_code]);
 
             $qrCodeImage = QrCode::format('svg')
                 ->size(300)
                 ->backgroundColor(255, 255, 255)
                 ->color(0, 0, 0)
-                ->generate($verificationData);
+                ->generate($verificationUrl);
 
             $companyFolder = $this->getCompanyFolder($qrStamp->company);
             $fileName = $this->generateFileName($qrStamp->signatory, $qrStamp->unique_code);
@@ -148,6 +157,7 @@ class QrStampService
             }
 
             $uniqueCode = $this->generateCodeUnique();
+            $tokenHash = $this->generateTokenHash($uniqueCode);
 
             $payload = $this->preparePayload($signatory);
             $encryptedPayload = $this->encryptPayload($payload);
@@ -155,6 +165,7 @@ class QrStampService
 
             $qrStamp = QrStamp::create([
                 'unique_code' => $uniqueCode,
+                'token_hash' => $tokenHash, // Stocker le hash du token (sécurisé)
                 'company_id' => $signatory->company_id,
                 'signatory_id' => $signatory->id,
                 'payload_encrypted' => $encryptedPayload,
@@ -168,6 +179,7 @@ class QrStampService
                     'notes' => $signatory->notes,
                     'generated_by_user' => Auth::check() ? Auth::user()->name : null,
                     'ip_address' => request()->ip(),
+                    'user_agent' => request()->userAgent(),
                     'signature_image' => $signatory->signature_image,
                 ],
             ]);
@@ -205,7 +217,7 @@ class QrStampService
         }
     }
 
-    public function updateQrStamp(Signatory $signatory, array $data = []): QrStamp
+     public function updateQrStamp(Signatory $signatory, array $data = []): QrStamp
     {
         return DB::transaction(function () use ($signatory, $data) {
             $qrStamp = $signatory->qrStamp;
@@ -234,7 +246,52 @@ class QrStampService
 
             return $qrStamp->fresh();
         });
-    }
+    } 
+
+    /* public function updateQrStamp(Signatory $signatory, array $data = []): QrStamp
+    {
+        return DB::transaction(function () use ($signatory, $data) {
+            $qrStamp = $signatory->qrStamp;
+
+            if (! $qrStamp) {
+                throw new \Exception('Aucun QrStamp trouvé pour mise à jour.');
+            }
+
+            // Supprimer l'ancienne image QR
+            if ($qrStamp->qr_image_path && Storage::disk('public')->exists($qrStamp->qr_image_path)) {
+                Storage::disk('public')->delete($qrStamp->qr_image_path);
+            }
+
+            // Générer un nouveau code unique et son hash
+            $newUniqueCode = $this->generateCodeUnique();
+            $newTokenHash = $this->generateTokenHash($newUniqueCode);
+
+            $this->applySignatoryUpdates($signatory, $data);
+
+            $payload = $this->preparePayload($signatory);
+            $encryptedPayload = $this->encryptPayload($payload);
+            $signatureHash = $this->generateSignatureHash($newUniqueCode, $encryptedPayload);
+
+            $qrStamp->update([
+                'unique_code' => $newUniqueCode,
+                'token_hash' => $newTokenHash,
+                'payload_encrypted' => $encryptedPayload,
+                'signature_hash' => $signatureHash,
+                'issued_at' => now(),
+            ]);
+
+            if (isset($data['expires_at'])) {
+                $qrStamp->update(['expires_at' => $data['expires_at']]);
+            }
+
+            // Régénérer l'image QR avec le nouveau code
+            $newQrImagePath = $this->generateQrImage($qrStamp);
+            $qrStamp->update(['qr_image_path' => $newQrImagePath]);
+
+            return $qrStamp->fresh();
+        });
+    } */
+
 
 
     

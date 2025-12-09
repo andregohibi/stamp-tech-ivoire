@@ -6,6 +6,7 @@ use App\Models\QrStamp;
 use App\Models\Signatory;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 

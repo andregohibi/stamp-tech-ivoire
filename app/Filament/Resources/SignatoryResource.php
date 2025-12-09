@@ -34,13 +34,14 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Tables\Actions\DeleteBulkAction;
 use App\Filament\Resources\SignatoryResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Filament\Resources\SignatoryResource\Pages\Qrcodes;
 use App\Filament\Resources\SignatoryResource\RelationManagers;
 use App\Filament\Resources\SignatoryResource\Pages\EditSignatory;
 use App\Filament\Resources\SignatoryResource\Pages\ViewSignatory;
 use App\Filament\Resources\SignatoryResource\Pages\CreateSignatory;
 use App\Filament\Resources\SignatoryResource\Pages\ListSignatories;
 
-class SignatoryResource extends Resource
+class SignatoryResource extends BaseResource
 {
     protected static ?string $model = Signatory::class;
 
@@ -50,13 +51,14 @@ class SignatoryResource extends Resource
 
     protected static ?string $navigationLabel = 'Signataires';
 
-    protected static ?string $recordTitleAttribute = 'Signataire';
+    // protected static ?string $recordTitleAttribute = 'Signataire';
+    protected static ?string $recordTitleAttribute = 'full_name';
 
     protected static ?string $modelLabel = 'Signataire';
     
     protected static ?string $pluralModelLabel = 'Signataires';
 
-    protected static bool $shouldSkipAuthorization = true;
+    protected static bool $shouldSkipAuthorization = false;
 
     public static function form(Form $form): Form
     {
@@ -320,6 +322,14 @@ class SignatoryResource extends Resource
         return [];
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->withoutGlobalScopes([
+                SoftDeletingScope::class,
+            ]);
+    }
+
     public static function getPages(): array
     {
         return [
@@ -327,7 +337,7 @@ class SignatoryResource extends Resource
             'create' => Pages\CreateSignatory::route('/create'),
             'edit' => Pages\EditSignatory::route('/modifier/{record:id}'),
             'view' => Pages\ViewSignatory::route('/details/{record:id}'),
-            
+            'qrcodes' => Pages\Qrcodes::route('/qrcodes'),
         ];
     }
 }

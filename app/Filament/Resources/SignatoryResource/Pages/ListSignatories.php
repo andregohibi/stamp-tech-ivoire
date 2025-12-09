@@ -17,6 +17,23 @@ class ListSignatories extends ListRecords
                 ->label('Créer un signataire')
                 ->icon('heroicon-m-plus')
                 ->color('success'),
+
+            Actions\Action::make('qrcodes')
+                ->label('Gestion des QR Codes')
+                ->icon('heroicon-o-qr-code')
+                ->url(SignatoryResource::getUrl('qrcodes'))
+                ->extraAttributes([
+                    'style'=>  '
+                            background-color:#4FC3F7;
+                            color:white;
+                            border-color:#4FC3F7;
+                            border-radius:8px;
+                        ',
+                     'class' => 'hover:bg-[#29B6F6]',
+                ])
+                ->button(),
+
+
         ];
     }
 

@@ -134,7 +134,75 @@ class ViewSignatory extends ViewRecord
                         Tab::make('Qr Code generé')
                                 ->icon('heroicon-o-qr-code')
                                 ->schema([
-                           
+                                        Grid::make(3)
+                                        ->schema([
+                                        
+                                        TextEntry::make('qrStamp.unique_code')
+                                                ->label('ID Code QR'),
+                                                
+                                             
+                                        ImageEntry::make('qrStamp.qr_image_path')
+                                                ->label('QR Code')
+                                                ->disk('public')
+                                                ->size(250)
+                                                ->hidden(fn ($record) => !$record->qrStamp)
+                                                ->visibility('public')
+                                                ->columnSpan(1), 
+                                        TextEntry::make('qrStamp.status')
+                                                ->label('Statut')
+                                                ->badge()
+                                                ->color(fn (string $state): string => match ($state) {
+                                                        'active' => 'success',
+                                                        'inactive' => 'gray',
+                                                        'revoked' => 'danger',
+                                                        'expired' => 'warning',
+                                                        default => 'secondary',
+                                                }),
+                                        
+                                        TextEntry::make('qrStamp.issued_at')
+                                                ->label('Date de génération')
+                                                ->dateTime('d/m/Y H:i'),
+                                                
+                                        TextEntry::make('qrStamp.expires_at')
+                                                ->label('Date d\'expiration')
+                                                ->dateTime('d/m/Y H:i')
+                                                ->placeholder('Aucune expiration'),
+
+                                        TextEntry::make('qrStamp.verification_count')
+                                                ->label('Nombre de vérifications')
+                                                ->default(0)
+                                                ->badge()
+                                                ->color('info'),
+                                                
+                                        TextEntry::make('qrStamp.created_by')
+                                                ->label('Créé par')
+                                                ->placeholder('Non spécifié'),
+
+                                         Section::make()
+                                                ->schema([
+                                                               
+                                                        TextEntry::make('qrStamp.metadata.notes')
+                                                                ->label('Notes')
+                                                                ->inlineLabel()
+                                                                ->formatStateUsing(fn ($state) => $state ?? 'Aucune note'),
+                                                                
+                                                        TextEntry::make('qrStamp.metadata.generated_by_user')
+                                                                ->label('Généré par')
+                                                                ->inlineLabel()
+                                                                ->formatStateUsing(fn ($state) => $state ?? 'Non spécifié'),
+                                                                
+                                                        TextEntry::make('qrStamp.metadata.ip_address')
+                                                                ->label('Adresse IP')
+                                                                ->inlineLabel()
+                                                                ->formatStateUsing(fn ($state) => $state ?? 'Non spécifiée'),
+                                                                
+                                                                
+                                                ])
+                                                ->columnSpanFull()
+
+
+                                        ])
+                                        
                                 ]),
 
                         Tab::make('Abonnements')

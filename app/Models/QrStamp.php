@@ -20,6 +20,7 @@ class QrStamp extends Model
 
     protected $fillable = [
         'unique_code',
+        'token_hash', // SHA256 du token (sécurisé)
         'company_id',
         'signatory_id',
         'payload_encrypted',
@@ -32,8 +33,11 @@ class QrStamp extends Model
         'revocation_reason',
         'metadata',
         'created_by',
-         'updated_by',
-
+        'updated_by',
+        'verification_attempts',
+        'last_suspicious_attempt',
+        'last_suspicious_ip',
+        'last_suspicious_user_agent',
     ];
 
     protected $guarded = [
@@ -50,12 +54,12 @@ class QrStamp extends Model
         'issued_at' => 'datetime',
         'expires_at' => 'datetime',
         'revoked_at' => 'datetime',
-        'verification_count' => 'integer',
         'last_verified_at' => 'datetime',
+        'last_suspicious_attempt' => 'datetime',
+        'verification_count' => 'integer',
         'metadata' => 'array',
         'deleted_at' => 'datetime',
     ];
-
 
     // Relations
 
